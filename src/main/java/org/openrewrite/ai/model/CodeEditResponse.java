@@ -29,7 +29,7 @@ public class CodeEditResponse {
 
     @Value
     static class Choice {
-        String text;
+        String message;
     }
 
     @Value

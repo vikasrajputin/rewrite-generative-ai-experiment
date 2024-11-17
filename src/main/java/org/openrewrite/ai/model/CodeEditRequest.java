@@ -19,7 +19,7 @@ import lombok.Value;
 
 @Value
 public class CodeEditRequest {
-    String model = "code-davinci-edit-001";
+    String model = "gpt-4o";
     double temperature = 0.3;
     String instruction;
     String input;

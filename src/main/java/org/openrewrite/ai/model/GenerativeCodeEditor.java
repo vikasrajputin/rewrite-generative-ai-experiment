@@ -19,24 +19,31 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.cfg.ConstructorDetector;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
+import lombok.extern.slf4j.Slf4j;
 import org.openrewrite.Cursor;
 import org.openrewrite.ExecutionContext;
 import org.openrewrite.HttpSenderExecutionContextView;
+import org.openrewrite.ai.utils.CodeUtils;
 import org.openrewrite.ipc.http.HttpSender;
 import org.openrewrite.java.JavaTemplate;
 import org.openrewrite.java.tree.Statement;
 import org.openrewrite.marker.Markup;
 
 import java.io.IOException;
+import java.util.*;
 import java.util.function.Supplier;
 
+@Slf4j
 public class GenerativeCodeEditor {
     private static final ObjectMapper mapper = JsonMapper.builder()
         .constructorDetector(ConstructorDetector.USE_PROPERTIES_BASED)
         .build()
         .registerModule(new ParameterNamesModule())
-        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+        .registerModule(new JavaTimeModule())
+        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+        .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     private final Supplier<Cursor> cursor;
     private final HttpSender http;
@@ -50,21 +57,29 @@ public class GenerativeCodeEditor {
 
     public <J2 extends Statement> J2 edit(J2 j, String instruction) {
         String input = j.printTrimmed(cursor.get());
+        Message systemMessage = new Message("system",instruction);
+        Message userMessage = new Message("user", input);
+        ChatRequest chatRequest = ChatRequest.builder().messages(Arrays.asList(systemMessage, userMessage)).build();
         try (HttpSender.Response raw = http
-            .post("https://api.openai.com/v1/edits")
+            .post("https://api.openai.com/v1/chat/completions")
             .withHeader("Authorization", "Bearer " + ctx.getOpenapiToken().trim())
-            .withContent("application/json", mapper.writeValueAsBytes(new CodeEditRequest(instruction, input)))
+            .withContent("application/json", mapper.writeValueAsBytes(chatRequest))
             .send()) {
-
-            CodeEditResponse response = mapper.readValue(raw.getBodyAsBytes(), CodeEditResponse.class);
-            if (response.getError() != null) {
-                return Markup.warn(j, new IllegalStateException("Code edit failed: " + response.getError()));
+            log.info("Response code - {}",raw.getCode());
+            ChatResponse response = null;
+            Map<String,String> errorResponse = new HashMap<>();
+            if(raw.getCode() >= 200 && raw.getCode() < 300) {
+                response = mapper.readValue(raw.getBodyAsBytes(), ChatResponse.class);
+                log.info("Response body - {}",response);
+                String extractedCodeSnippet = CodeUtils.extractCodeFromResponse(response.getChoices().get(0).getMessage().getContent());
+                return JavaTemplate.builder(extractedCodeSnippet)
+                        .contextSensitive()
+                        .build()
+                        .apply(cursor.get(), j.getCoordinates().replace());
+            }else{
+                errorResponse = mapper.readValue(raw.getBodyAsBytes(), Map.class);
+                return Markup.warn(j, new IllegalStateException("Code edit failed: " + errorResponse));
             }
-
-            return JavaTemplate.builder(response.getChoices().get(0).getText())
-                .contextSensitive()
-                .build()
-                .apply(cursor.get(), j.getCoordinates().replace());
         } catch (IOException e) {
             return Markup.warn(j, e);
         }

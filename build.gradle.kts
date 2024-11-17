@@ -17,8 +17,9 @@ dependencies {
     compileOnly("com.google.code.findbugs:jsr305:latest.release")
     annotationProcessor("org.projectlombok:lombok:latest.release")
     implementation(platform("org.openrewrite:rewrite-bom:${rewriteVersion}"))
-
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
     implementation("org.openrewrite:rewrite-java")
+    implementation("org.slf4j:slf4j-api:1.7.36")
     runtimeOnly("org.openrewrite:rewrite-java-17")
     // Need to have a slf4j binding to see any output enabled from the parser.
     runtimeOnly("ch.qos.logback:logback-classic:1.2.+")

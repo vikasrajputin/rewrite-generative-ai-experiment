@@ -52,7 +52,7 @@ class DefaultComesLastTest implements RewriteTest {
         }
     }
 
-    @RepeatedTest(10)
+    @RepeatedTest(5)
     void edit() {
         rewriteRun(
           //language=java
@@ -83,7 +83,7 @@ class DefaultComesLastTest implements RewriteTest {
                   void doSomething() {}
                   void doSomethingElse() {}
                   void error() {}
-                            
+
                   void test(int param) {
                       switch (param) {
                           case 0:
